@@ -36,7 +36,27 @@ public class UiSound : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
 }
 
 // Guarda el tamaño base de un texto para poder reescalarlo en vivo (menú de pausa).
-public class TextBase : MonoBehaviour { public int size; public int lastMax; public float lastScale = 1f; }
+public class TextBase : MonoBehaviour
+{
+    public int size; public int lastMax; public float lastScale = 1f;
+    public float maxF;                       // tamaño máximo SIN redondear (así subir y bajar el tamaño no pierde precisión)
+    public bool hasBox, boxDone;             // caja original del texto (para poder agrandarla un poco cuando se sube el tamaño)
+    public Vector2 boxMin, boxMax;
+    public float boxExp;                     // cuántos píxeles se agrandó la caja arriba y abajo
+    int born;
+
+    void Awake() { born = Time.frameCount; }
+
+    // Unos cuadros después de nacer (cuando el diseño ya tiene su tamaño real) se le da a la caja el margen que pide el tamaño de texto actual.
+    void Update()
+    {
+        if (Time.frameCount < born + 2) return;
+        boxDone = true;
+        var t = GetComponent<Text>();
+        if (t != null) UIKit.ExpandBox(t, this);
+        enabled = false;
+    }
+}
 
 // Hace parpadear un marco de resaltado.
 public class PulseAlpha : MonoBehaviour
@@ -52,9 +72,10 @@ public static class UIKit
     public static Font CustomFont;
     public static float TextScale = 1f;   // multiplicador de TODOS los textos (se cambia en GameFlow > Text Scale o en la pausa)
 
-    // Límites del tamaño de texto (1.0 = ya viene grande; 1.5 = el máximo).
+    // Límites del tamaño de texto (1.0 = ya viene grande; 1.8 = el máximo).
+    static float appliedScale = -1f;      // último tamaño aplicado con RescaleAll
     public const float MinScale = 1.0f;
-    public const float MaxScale = 1.5f;
+    public const float MaxScale = 1.8f;
     public const int MinFont = 11;        // un texto con ajuste automático NUNCA baja de este tamaño (antes llegaba a 6 y no se leía)
     public static float Scale { get { return Mathf.Clamp(TextScale, MinScale, MaxScale); } }
 
@@ -92,7 +113,25 @@ public static class UIKit
         tb.size = baseSize;
         tb.lastScale = Scale;
         t.fontSize = Size(baseSize);
-        if (t.resizeTextForBestFit) { t.resizeTextMaxSize = Size(baseSize); tb.lastMax = t.resizeTextMaxSize; }
+        if (t.resizeTextForBestFit) { t.resizeTextMaxSize = Size(baseSize); tb.lastMax = t.resizeTextMaxSize; tb.maxF = tb.lastMax; }
+    }
+
+    // Agranda la caja del texto un poco hacia arriba y hacia abajo cuando se sube el tamaño: con la caja original el texto ya llenaba
+    // el espacio y "no crecía" aunque la letra pidiera más (por eso parecía que solo se podía bajar el tamaño).
+    public static void ExpandBox(Text t, TextBase tb)
+    {
+        if (t == null || tb == null) return;
+        if (t.GetComponent<ContentSizeFitter>() != null) return;          // los textos con barra de desplazamiento crecen solos
+        var rt = t.rectTransform;
+        float k = Mathf.Max(0f, Scale - 1f);
+        float h0 = Mathf.Max(0f, rt.rect.height - 2f * tb.boxExp);          // alto sin la ampliación anterior
+        float d = Mathf.Min(h0 * 0.5f * k, 30f * k);
+        float delta = d - tb.boxExp;                                        // solo se aplica la diferencia: no pisa otros cambios de posición
+        if (Mathf.Abs(delta) < 0.01f) return;
+        rt.offsetMin = new Vector2(rt.offsetMin.x, rt.offsetMin.y - delta);
+        rt.offsetMax = new Vector2(rt.offsetMax.x, rt.offsetMax.y + delta);
+        tb.boxExp = d;
+        tb.hasBox = true;
     }
 
     // Reaplica TextScale a todos los textos bajo "root" (menos los que cuelgan de "skip").
@@ -100,29 +139,42 @@ public static class UIKit
     public static void RescaleAll(Transform root, Transform skip)
     {
         float now = Scale;
+        float prev = appliedScale > 0f ? appliedScale : now;
         foreach (var t in root.GetComponentsInChildren<Text>(true))
         {
             if (skip != null && t.transform.IsChildOf(skip)) continue;
             var tb = t.GetComponent<TextBase>();
-            if (tb == null) continue;
+            if (tb == null)
+            {
+                // Texto creado por otro código: se toma su tamaño actual como base para que también cambie.
+                tb = t.gameObject.AddComponent<TextBase>();
+                tb.size = Mathf.Max(MinFont, Mathf.RoundToInt(t.fontSize / Mathf.Max(0.5f, prev)));
+                tb.lastScale = prev;
+                tb.maxF = t.resizeTextForBestFit ? t.resizeTextMaxSize : 0f;
+                tb.boxDone = true; tb.enabled = false;
+            }
             float ratio = now / Mathf.Max(0.01f, tb.lastScale);
             tb.lastScale = now;
             t.resizeTextMinSize = MinFont;
-            // Un texto que el Typewriter dejó con tamaño fijo vuelve al ajuste automático para no perder líneas.
             if (!t.resizeTextForBestFit && t.GetComponent<Typewriter>() != null)
             {
+                // Un texto que el Typewriter dejó con tamaño fijo vuelve al ajuste automático para no perder líneas.
                 t.resizeTextForBestFit = true;
                 t.resizeTextMaxSize = Size(tb.size);
-                tb.lastMax = t.resizeTextMaxSize;
-                continue;
+                tb.lastMax = t.resizeTextMaxSize; tb.maxF = tb.lastMax;
             }
-            if (t.resizeTextForBestFit)
+            else if (t.resizeTextForBestFit)
             {
-                t.resizeTextMaxSize = Mathf.Max(MinFont, Mathf.RoundToInt(t.resizeTextMaxSize * ratio));
+                float cur = t.resizeTextMaxSize;
+                if (tb.maxF <= 0f || Mathf.Abs(Mathf.Round(tb.maxF) - cur) > 0.5f) tb.maxF = cur;      // alguien más lo cambió: se parte de ese valor
+                tb.maxF *= ratio;                                                                    // sin redondear: subir y bajar no pierde tamaño
+                t.resizeTextMaxSize = Mathf.Max(MinFont, Mathf.RoundToInt(tb.maxF));
                 tb.lastMax = t.resizeTextMaxSize;
             }
             else t.fontSize = Size(tb.size);
+            ExpandBox(t, tb);
         }
+        appliedScale = now;
     }
 
     public static Slider MakeSlider(Transform parent, float x0, float y0, float x1, float y1,
@@ -228,6 +280,7 @@ public static class UIKit
         tbase.size = size;
         tbase.lastScale = Scale;
         tbase.lastMax = t.resizeTextMaxSize;
+        tbase.maxF = tbase.lastMax;
         t.alignment = anchor;
         t.color = color;
         t.text = text;

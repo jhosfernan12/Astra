@@ -10,10 +10,7 @@ public class PauseMenu : MonoBehaviour
         "<color=#ffc033>ARES-1: UN PUESTO EN MARTE O EN LA LUNA</color>\n" +
         "NASA Space Apps Challenge 2026 - Space Mission Design Game\n\n" +
         "<color=#ffc033>EQUIPO</color>\n" +
-        "Avendaño Fernandez Baca Marcelo Rodolfo\n\n" +
-        "Pacheco Carreño Jhostyn Fernando\n\n" +
-        "Tapia Cardenas Janitza Sarita\n\n" +
-        "Yato Marroquin Joaquin Mateo\n\n" +
+        "(escribe aquí los nombres del equipo)\n\n" +
         "<color=#ffc033>HERRAMIENTAS Y RECURSOS</color>\n" +
         "Motor: Unity\n" +
         "Render PSX: Haunted PSX Render Pipeline (pastasfuture)\n" +

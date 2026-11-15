@@ -11,7 +11,7 @@ public class GameFlow : MonoBehaviour
     public Camera uiCamera;    // opcional: arrástrale la cámara PSX para que la UI también se pixelee
     public Sprite logoSprite;  // opcional: tu logo (Texture Type = Sprite). Si lo dejas vacío se dibuja uno por código.
     public bool showBootScreen = true;
-    [Range(1f, 1.5f)] public float textScale = 1f;   // tamaño de TODOS los textos (1 = ya viene grande, 1.5 = el máximo; los textos largos se pueden desplazar)
+    [Range(1f, 1.8f)] public float textScale = 1f;   // tamaño de TODOS los textos (1 = ya viene grande, 1.8 = el máximo; los textos largos se pueden desplazar)
 
     [Header("Datos reales de la NASA")]
     public bool useLiveDonki = true;          // al abrir el juego intenta descargar las llamaradas solares más recientes de NASA DONKI
